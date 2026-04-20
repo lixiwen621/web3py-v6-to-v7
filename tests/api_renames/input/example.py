@@ -1,12 +1,12 @@
 # Contract ABI encoding
-encoded = contract.encodeABI(
+encoded = contract.encode_abi(
     fn_name="transfer",
     args=[recipient, amount]
 )
 
-from web3.exceptions import SolidityError
+from web3.exceptions import ContractLogicError
 
 try:
     result = contract.functions.badCall().transact()
-except SolidityError as e:
+except ContractLogicError as e:
     print(f"Reverted: {e}")
