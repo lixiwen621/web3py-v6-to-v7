@@ -1,0 +1,9 @@
+# WebSocketProviderV2 -> WebSocketProvider
+# WebsocketProvider (standalone) -> LegacyWebSocketProvider
+id: websocket-provider
+language: python
+
+rule:
+  pattern: "WebsocketProviderV2"
+
+fix: "WebSocketProvider"

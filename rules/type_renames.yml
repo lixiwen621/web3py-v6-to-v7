@@ -1,0 +1,8 @@
+# CallOverride -> StateOverride type rename
+id: type-rename-call-override
+language: python
+
+rule:
+  pattern: "CallOverride"
+
+fix: StateOverride

@@ -1,0 +1,34 @@
+# Remove deprecated middleware imports and references
+# abi_middleware, simple_cache_middleware, latest_block_based_cache_middleware,
+# time_based_cache_middleware, fixture_middleware, result_generator_middleware,
+# http_retry_request_middleware, normalize_request_parameters
+id: middleware-removals
+language: python
+
+rule:
+  any:
+    # Remove import statements for deprecated middleware
+    - kind: import_statement
+      has:
+        pattern: "abi_middleware"
+    - kind: import_statement
+      has:
+        pattern: "simple_cache_middleware"
+    - kind: import_statement
+      has:
+        pattern: "latest_block_based_cache_middleware"
+    - kind: import_statement
+      has:
+        pattern: "time_based_cache_middleware"
+    - kind: import_statement
+      has:
+        pattern: "fixture_middleware"
+    - kind: import_statement
+      has:
+        pattern: "result_generator_middleware"
+    - kind: import_statement
+      has:
+        pattern: "http_retry_request_middleware"
+    - kind: import_statement
+      has:
+        pattern: "normalize_request_parameters"

@@ -1,0 +1,21 @@
+# API renames:
+# encodeABI -> encode_abi (snake_case)
+# SolidityError -> ContractLogicError
+id: api-renames
+language: python
+
+rewriters:
+  - id: rename-encode-abi
+    rule:
+      pattern: "encodeABI"
+    fix: encode_abi
+
+  - id: rename-solidity-error
+    rule:
+      pattern: "SolidityError"
+    fix: ContractLogicError
+
+rule:
+  any:
+    - pattern: "encodeABI"
+    - pattern: "SolidityError"

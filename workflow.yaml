@@ -1,0 +1,21 @@
+version: "1"
+
+nodes:
+  - id: web3py-v6-to-v7
+    name: "Migrate web3.py v6 → v7"
+    type: automatic
+    steps:
+      - name: "Apply all web3.py v6→v7 transformations"
+        js-ast-grep:
+          js_file: "scripts/web3py_v6_to_v7.ts"
+          language: "python"
+          include:
+            - "**/*.py"
+          exclude:
+            - "**/*.test.py"
+            - "**/test_*.py"
+            - "**/*_test.py"
+            - "**/node_modules/**"
+            - "**/__pycache__/**"
+            - "**/.venv/**"
+            - "**/venv/**"
