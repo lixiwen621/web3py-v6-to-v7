@@ -93,25 +93,33 @@ const codemod: Codemod<Python> = async (root) => {
     }
   }
 
-  // --- w3.geth.miner / geth.miner → comment ---
+  // --- Lines containing geth.miner → replace entire line with comment ---
+  // Find attribute chains that start with geth.miner or w3.geth.miner
   const minerNodes = rootNode.findAll({
     rule: {
       any: [
-        { pattern: "w3.geth.miner" },
-        { pattern: "geth.miner" },
+        { pattern: "$BASE.geth.miner" },
+        { pattern: "$BASE.geth.miner.$METHOD" },
+        { pattern: "$BASE.geth.miner.$METHOD($ARGS)" },
       ],
     },
   });
   for (const node of minerNodes) {
-    edits.push({
-      startPos: node.range().start.index,
-      endPos: node.range().end.index,
-      insertedText: "# REMOVED in v7: geth.miner namespace removed",
-    });
-    hasChanges = true;
+    // Find the parent statement (expression_statement)
+    const parent = node.ancestors().find(
+      (a) => a.kind() === "expression_statement"
+    );
+    if (parent) {
+      edits.push({
+        startPos: parent.range().start.index,
+        endPos: parent.range().end.index,
+        insertedText: "# REMOVED in v7: geth.miner namespace removed",
+      });
+      hasChanges = true;
+    }
   }
 
-  // --- web3.pm / web3.ethpm → comment ---
+  // --- Lines containing web3.pm / web3.ethpm → replace with comment ---
   const pmNodes = rootNode.findAll({
     rule: {
       any: [
@@ -121,12 +129,44 @@ const codemod: Codemod<Python> = async (root) => {
     },
   });
   for (const node of pmNodes) {
-    edits.push({
-      startPos: node.range().start.index,
-      endPos: node.range().end.index,
-      insertedText: "# REMOVED in v7: EthPM module removed",
-    });
-    hasChanges = true;
+    const parent = node.ancestors().find(
+      (a) => a.kind() === "expression_statement" || a.kind() === "assignment"
+    );
+    if (parent) {
+      edits.push({
+        startPos: parent.range().start.index,
+        endPos: parent.range().end.index,
+        insertedText: "# REMOVED in v7: EthPM module removed",
+      });
+      hasChanges = true;
+    }
+  }
+
+  // --- Import lines with EthPM/LRU → remove the entire import line ---
+  const importNodes = rootNode.findAll({
+    rule: {
+      any: [
+        { kind: "import_statement", has: { pattern: "EthPM" } },
+        { kind: "import_statement", has: { pattern: "LRU" } },
+        { kind: "import_statement", has: { pattern: "lru_dict" } },
+        { kind: "import_from_statement", has: { pattern: "EthPM" } },
+        { kind: "import_from_statement", has: { pattern: "web3.pm" } },
+      ],
+    },
+  });
+  for (const node of importNodes) {
+    // Find the parent (usually module or expression_statement)
+    const parent = node.ancestors().find(
+      (a) => a.kind() === "expression_statement" || a.kind() === "module"
+    );
+    if (parent) {
+      edits.push({
+        startPos: node.range().start.index,
+        endPos: node.range().end.index,
+        insertedText: "# REMOVED in v7: this import no longer exists",
+      });
+      hasChanges = true;
+    }
   }
 
   if (!hasChanges) {
