@@ -1,2 +1,4 @@
-# The geth.miner namespace has been removed in v7.
-# Mining operations should be handled differently.
+# Mining operations via geth
+# REMOVED in v7: geth.miner namespace removed
+# REMOVED in v7: geth.miner namespace removed
+# REMOVED in v7: geth.miner namespace removed

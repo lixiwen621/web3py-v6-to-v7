@@ -1,106 +1,100 @@
 # web3py-v6-to-v7 Codemod
 
-Automated migration codemod for upgrading Python projects from [web3.py](https://github.com/ethereum/web3.py) **v6** to **v7**.
+Automated migration codemod for upgrading Python projects from [web3.py](https://github.com/ethereum/web3.py) **v6** to **v7**. Built for the [Boring AI Hackathon](https://dorahacks.io/hackathon/boring-ai) on DoraHacks.
 
-Built as a submission for the [Boring AI Hackathon](https://dorahacks.io/hackathon/boring-ai) on DoraHacks.
+## Evaluation Snapshot
 
-## Overview
+- **Accuracy (sample-observed)**: no incorrect deterministic rewrites observed in reviewed changed files across two real-repo runs.
+- **Coverage (score-aligned, occurrence N)**: `N=110`, `FP=0`, `FN=69`, auto-covered occurrences `=41`, so observed occurrence coverage is `41 / 110 = 37.3%`.
+- **Reliability**: fixture suite passes and two reproducible real-repo case studies are provided.
 
-web3.py v7 introduced several breaking changes that require code updates across all dependent projects. This codemod automates **80%+** of the migration deterministically using [Codemod](https://codemod.com)'s JSSG (JavaScript ast-grep) engine — turning a tedious manual process into a single command.
+## Real Evidence
+
+- Filled case study #1: `docs/case-study-web3py-v6.20.3.md`
+- Target repo #1: `ethereum/web3.py@v6.20.3` (`02acb874a35162b9a774baff2307c236dbf082fd`)
+- Filled case study #2: `docs/case-study-web3-ethereum-defi-main.md`
+- Target repo #2: `tradingstrategy-ai/web3-ethereum-defi@d5d184d042a8ddb8cb86d49a018f2492e6fb0ac8`
+- Repro command:
+
+```bash
+npx codemod workflow run -w workflow.yaml -t /path/to/web3.py --allow-dirty --no-interactive
+```
+
+## Coverage Formula (Reproducible)
+
+### Checklist-category deterministic coverage (primary metric)
+
+- Scored deterministic categories (`N_category`): `11` (added `pythonic_middleware` → `PythonicMiddleware`)
+- Automatically migrated categories (`A_category`): `9`
+- TODO/manual follow-up categories (`M_category`): `2`
+- Coverage (category): `9 / 11 = 81.8%`
+
+### Raw occurrence delta (diagnostic metric)
+
+- Total tracked old-pattern occurrences across real-repo samples (`N_occurrence`): `110` (`98 + 12`)
+- Remaining old-pattern occurrences after codemod (`FN_occurrence`): `69` (`68 + 1`)
+- Observed false positives in reviewed changed files (`FP_occurrence`): `0`
+- Auto-covered occurrences: `N_occurrence - FN_occurrence = 41`
+- Coverage (occurrence): `41 / 110 = 37.3%`
+
+> **Why 37.3% looks low:** The target repo (`ethereum/web3.py`) is the framework source itself, not an application codebase. The 69 unmigrated occurrences are mostly internal definitions, test fixtures, type annotations, and documentation — contexts where auto-rewrites would be unsafe. In typical application codebases that *consume* web3.py (rather than *are* web3.py), the effective coverage is significantly higher.
 
 ## What It Migrates
 
 | Category | v6 Pattern | v7 Pattern |
 |---|---|---|
-| **Middleware rename** | `name_to_address_middleware` | `ENSNameToAddressMiddleware` |
-| **Middleware rename** | `geth_poa_middleware` | `ExtraDataToPOAMiddleware` |
-| **WebSocket** | `WebsocketProviderV2` | `WebSocketProvider` |
-| **WebSocket** | `WebsocketProvider` | `LegacyWebSocketProvider` |
-| **Type rename** | `CallOverride` | `StateOverride` |
-| **API rename** | `encodeABI()` | `encode_abi()` |
-| **Exception rename** | `SolidityError` | `ContractLogicError` |
-| **Attribute rename** | `w3.middlewares` | `w3.middleware` |
-| **Removed namespace** | `w3.geth.miner.*` | Comment flag |
-| **Removed module** | `web3.pm`, `web3.ethpm` | Comment flag |
+| Middleware rename | `pythonic_middleware` | `PythonicMiddleware` |
+| Middleware rename | `attrdict_middleware` | `AttrDictMiddleware` |
+| Middleware rename | `name_to_address_middleware` | `ENSNameToAddressMiddleware` |
+| Middleware rename | `geth_poa_middleware` | `ExtraDataToPOAMiddleware` |
+| WebSocket | `WebsocketProviderV2` | `WebSocketProvider` |
+| WebSocket | `WebsocketProvider` | `LegacyWebSocketProvider` |
+| WebSocket API | `AsyncWeb3.persistent_websocket(...)` | `AsyncWeb3(...)` |
+| WebSocket API | `w3.ws.process_subscriptions()` | `w3.socket.process_subscriptions()` |
+| Type rename | `CallOverride` | `StateOverride` |
+| API rename | `encodeABI()` | `encode_abi()` |
+| Exception rename | `SolidityError` | `ContractLogicError` |
+| Attribute rename | `w3.middlewares` | `w3.middleware` |
+| Kwarg rename | `fromBlock` / `toBlock` / `blockHash` | `from_block` / `to_block` / `block_hash` |
+| Middleware builder | `construct_sign_and_send_raw_middleware(...)` | `SignAndSendRawMiddlewareBuilder.build(...)` |
+| Removed namespace | `w3.geth.miner.*` | TODO/comment flag |
+| Removed namespace | `w3.geth.personal.*` | TODO/comment flag |
+| Removed middleware | `abi_middleware`, `*_cache_middleware`, `result_generator_middleware`, `http_retry_request_middleware`, `normalize_request_parameters` | TODO/comment flag |
+| Removed module | `web3.pm`, `web3.ethpm`, `w3.pm`, `EthPM(...)` | TODO/comment flag |
 
 ## Usage
 
-### Prerequisites
-
-- [Node.js](https://nodejs.org/) 18+ (for `npx`)
-- Git-tracked project directory
-
-### Run the Migration
-
 ```bash
-# Option 1: Run directly with Codemod CLI
-npx codemod workflow run \
-  -w https://raw.githubusercontent.com/lixiwen621/web3py-v6-to-v7/main/workflow.yaml \
-  -t /path/to/your/project
-
-# Option 2: Clone and run locally
-git clone https://github.com/lixiwen621/web3py-v6-to-v7.git
-cd web3py-v6-to-v7
+# run migration
 npx codemod workflow run -w workflow.yaml -t /path/to/your/project
-```
 
-The codemod targets all `.py` files in your project, automatically excluding test files, `node_modules`, and virtual environments.
-
-### Preview Changes (Dry Run)
-
-```bash
+# dry-run preview
 npx codemod workflow run -w workflow.yaml -t /path/to/your/project --dry-run
 ```
 
-## Validation
+The workflow targets `**/*.py` and excludes tests/venv/node_modules (see `workflow.yaml`).
 
-This codemod was validated against the **official web3.py v6.20.3 source code** (28 files transformed, zero false positives):
+## Verification
 
-| File | Change |
-|---|---|
-| `web3/middleware/__init__.py` | `geth_poa_middleware` → `ExtraDataToPOAMiddleware` |
-| `web3/middleware/names.py` | `name_to_address_middleware` → `ENSNameToAddressMiddleware` |
-| `web3/providers/websocket/websocket_v2.py` | `WebsocketProviderV2` → `WebSocketProvider` |
-| `web3/providers/websocket/websocket.py` | `WebsocketProvider` → `LegacyWebSocketProvider` |
-| `web3/types.py` | `CallOverride` → `StateOverride` |
-| `web3/contract/base_contract.py` | `encodeABI` → `encode_abi` |
-| `web3/eth/base_eth.py` | `CallOverride` → `StateOverride` (type hints) |
-| `web3/main.py` | `WebsocketProvider` → `LegacyWebSocketProvider` |
-| ... and 20 more files | See [full diff](https://github.com/ethereum/web3.py/compare/v6.20.3...v7.0.0) |
-
-All changes match the official [v6 to v7 migration guide](https://web3py.readthedocs.io/en/stable/migration.html).
-
-## Project Structure
-
-```
-web3py-v6-to-v7/
-├── codemod.yaml              # Package metadata (name, version, author)
-├── workflow.yaml             # Workflow definition (steps, includes, excludes)
-├── scripts/
-│   └── web3py_v6_to_v7.ts   # JSSG transformation script (TypeScript + ast-grep)
-└── tests/                   # Test fixtures (input/expected pairs for each rule)
-    ├── middleware_renames/
-    ├── api_renames/
-    ├── type_renames/
-    ├── websocket_provider/
-    ├── middlewares_to_middleware/
-    └── geth_miner/
+```bash
+bash scripts/verify_fixtures.sh
 ```
 
-## Boring AI Hackathon
+This runs all `tests/*/input/example.py` fixtures through the workflow and diffs against `expected`.
 
-This project was built for the [Boring AI](https://dorahacks.io/hackathon/boring-ai) hackathon on DoraHacks, which challenges developers to create codemods that automate real-world software migrations using AI-assisted tooling.
+## Known Limitations
 
-**Scoring criteria met:**
-- **Accuracy**: Zero false positives — validated against the official web3.py v6 codebase
-- **Coverage**: All documented v6→v7 breaking changes are handled
-- **Reliability**: Tested with input/expected fixtures and real open-source repository
+- `hasWeb3Context` relies on import/symbol heuristics (`web3` imports + `w3.middleware_onion`), not full type-semantic analysis.
+- `geth.miner` in control-flow contexts is TODO-flagged instead of auto-rewritten to avoid unsafe structural edits.
+- Occurrence-level counts can include non-callsite/internal framework references; see case-study caveats.
+- "No false positives" in this README is sample-observed for audited runs, not a universal guarantee for every repository.
 
-## Tech Stack
+## Submission Assets
 
-- **[Codemod](https://codemod.com)** — AI-powered code transformation platform
-- **JSSG (JavaScript ast-grep)** — Tree-sitter based AST pattern matching engine
-- **QuickJS** — Sandboxed JavaScript runtime for safe codemod execution
+- Real case study (filled): `docs/case-study-web3py-v6.20.3.md`
+- Real case study (filled): `docs/case-study-web3-ethereum-defi-main.md`
+- Validation template: `docs/real_repo_validation_template.md`
+- Submission draft: `docs/dorahacks_submission_draft.md`
 
 ## License
 

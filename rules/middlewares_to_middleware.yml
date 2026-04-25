@@ -1,9 +1,0 @@
-# Variable/attribute name changes: middlewares -> middleware
-# This covers attribute access like obj.middlewares
-id: middlewares-to-middleware
-language: python
-
-rule:
-  pattern: "$OBJ.middlewares"
-
-fix: "$OBJ.middleware"

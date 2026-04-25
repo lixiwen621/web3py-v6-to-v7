@@ -1,9 +1,0 @@
-# Remove geth.miner namespace references
-# w3.geth.miner -> removed entirely
-id: geth-miner-removal
-language: python
-
-rule:
-  any:
-    - pattern: "w3.geth.miner"
-    - pattern: "geth.miner"
