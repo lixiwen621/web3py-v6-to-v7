@@ -47,6 +47,7 @@ npx codemod workflow run -w workflow.yaml -t /path/to/web3.py --allow-dirty --no
 | Middleware rename | `attrdict_middleware` | `AttrDictMiddleware` |
 | Middleware rename | `name_to_address_middleware` | `ENSNameToAddressMiddleware` |
 | Middleware rename | `geth_poa_middleware` | `ExtraDataToPOAMiddleware` |
+| Middleware rename | `pythonic_middleware` | `PythonicMiddleware` |
 | WebSocket | `WebsocketProviderV2` | `WebSocketProvider` |
 | WebSocket | `WebsocketProvider` | `LegacyWebSocketProvider` |
 | WebSocket API | `AsyncWeb3.persistent_websocket(...)` | `AsyncWeb3(...)` |
@@ -54,6 +55,9 @@ npx codemod workflow run -w workflow.yaml -t /path/to/web3.py --allow-dirty --no
 | Type rename | `CallOverride` | `StateOverride` |
 | API rename | `encodeABI()` | `encode_abi()` |
 | Exception rename | `SolidityError` | `ContractLogicError` |
+| Exception rename | `AssertionError` / `ValueError` / `TypeError` / `AttributeError` | `Web3AssertionError` / `Web3ValueError` / `Web3TypeError` / `Web3AttributeError` (in web3.exceptions context) |
+| ABI type migration | `ABIEventParams` / `ABIFunctionComponents` / `ABIFunctionParams` | `ABIComponentIndexed` / `ABIComponent` |
+| Attribute rename | `contract.functions.myFunction.function_identifier` | `.abi_element_identifier` |
 | Attribute rename | `w3.middlewares` | `w3.middleware` |
 | Kwarg rename | `fromBlock` / `toBlock` / `blockHash` | `from_block` / `to_block` / `block_hash` |
 | Middleware builder | `construct_sign_and_send_raw_middleware(...)` | `SignAndSendRawMiddlewareBuilder.build(...)` |
@@ -61,6 +65,7 @@ npx codemod workflow run -w workflow.yaml -t /path/to/web3.py --allow-dirty --no
 | Removed namespace | `w3.geth.personal.*` | TODO/comment flag |
 | Removed middleware | `abi_middleware`, `*_cache_middleware`, `result_generator_middleware`, `http_retry_request_middleware`, `normalize_request_parameters` | TODO/comment flag |
 | Removed module | `web3.pm`, `web3.ethpm`, `w3.pm`, `EthPM(...)` | TODO/comment flag |
+| Removed type | `LRU` / `lru_dict` from `web3.datastructures` | Import → comment; usage left as-is |
 
 ## Usage
 

@@ -68,6 +68,11 @@ const codemod: Codemod<Python> = async (root) => {
         { pattern: "import web3.$MODULE as $ALIAS" },
         { pattern: "from web3 import $NAMES" },
         { pattern: "from web3.$MODULE import $NAMES" },
+        // Also catch from web3.xxx import (even when xxx is not a sub-module pattern)
+        { pattern: "from web3.types import $NAMES" },
+        { pattern: "from web3.datastructures import $NAMES" },
+        { pattern: "from web3.exceptions import $NAMES" },
+        { pattern: "from web3.middleware import $NAMES" },
       ],
     },
   }).length > 0;
@@ -83,15 +88,11 @@ const codemod: Codemod<Python> = async (root) => {
   const hasWeb3Context = hasWeb3Import || hasWeb3SymbolUsage;
 
   // Middleware function → class renames (v6 function-based → v7 class-based model)
+  // Only mappings confirmed by official v7 migration guide
   const middlewareIdentifierMap: Record<string, string> = {
     name_to_address_middleware: "ENSNameToAddressMiddleware",
     geth_poa_middleware: "ExtraDataToPOAMiddleware",
     pythonic_middleware: "PythonicMiddleware",
-    attrdict_middleware: "AttrDictMiddleware",
-    gas_price_strategy_middleware: "GasPriceStrategyMiddleware",
-    validation_middleware: "ValidationMiddleware",
-    formatting_middleware: "FormattingMiddleware",
-    local_filter_middleware: "LocalFilterMiddleware",
   };
   const shouldRenameMiddlewareIdentifier = (node: SgNode<Python>): boolean => {
     const inWeb3MiddlewareImport = node
@@ -103,12 +104,13 @@ const codemod: Codemod<Python> = async (root) => {
       return true;
     }
 
-    const inMiddlewareInjectCall = node
+    // Check both .add() and .inject() — both are valid middleware registration methods
+    const inMiddlewareOnionCall = node
       .ancestors()
       .find((a) => a.kind() === "call")
       ?.text()
-      .includes(".middleware_onion.inject(");
-    return Boolean(inMiddlewareInjectCall);
+      .match(/\.middleware_onion\.(add|inject)\(/);
+    return Boolean(inMiddlewareOnionCall);
   };
 
   const shouldRenameCallOverrideIdentifier = (node: SgNode<Python>): boolean => {
@@ -184,13 +186,13 @@ const codemod: Codemod<Python> = async (root) => {
 
   // --- Middleware function/class renames (strictly targeted) ---
   if (hasWeb3Context) {
+    const middlewarePatternList = Object.keys(middlewareIdentifierMap).map(
+      (key) => ({ pattern: key })
+    );
     const middlewareIds = rootNode.findAll({
       rule: {
         kind: "identifier",
-        any: [
-          { pattern: "name_to_address_middleware" },
-          { pattern: "geth_poa_middleware" },
-        ],
+        any: middlewarePatternList,
       },
     });
     for (const node of middlewareIds) {
@@ -213,6 +215,134 @@ const codemod: Codemod<Python> = async (root) => {
     for (const node of callOverrideIds) {
       if (shouldRenameCallOverrideIdentifier(node)) {
         addEdit(node.range().start.index, node.range().end.index, "StateOverride");
+      }
+    }
+  }
+
+  // --- Exception type renames (only in web3.exceptions import contexts) ---
+  // Official v7: AssertionError → Web3AssertionError, ValueError → Web3ValueError,
+  // TypeError → Web3TypeError, AttributeError → Web3AttributeError
+  // These are ONLY renamed when the identifier appears in a from web3.exceptions import
+  // or when it's used as a caught exception type in a try/except block in a web3 context file.
+  if (hasWeb3Context) {
+    const exceptionRenames: Record<string, string> = {
+      AssertionError: "Web3AssertionError",
+      ValueError: "Web3ValueError",
+      TypeError: "Web3TypeError",
+      AttributeError: "Web3AttributeError",
+    };
+    for (const [oldEx, newEx] of Object.entries(exceptionRenames)) {
+      const nodes = rootNode.findAll({
+        rule: {
+          kind: "identifier",
+          pattern: oldEx,
+        },
+      });
+      for (const node of nodes) {
+        // Case 1: inside `from web3.exceptions import ...`
+        const inWeb3ExceptionImport = node
+          .ancestors()
+          .find((a) => a.kind() === "import_from_statement")
+          ?.text()
+          .includes("from web3.exceptions import");
+        if (inWeb3ExceptionImport) {
+          addEdit(node.range().start.index, node.range().end.index, newEx);
+          continue;
+        }
+
+        // Case 2: inside `except <ExceptionType>` block (catch clause)
+        const inExceptClause = node
+          .ancestors()
+          .some((a) => a.kind() === "except_clause");
+        if (inExceptClause) {
+          addEdit(node.range().start.index, node.range().end.index, newEx);
+          continue;
+        }
+
+        // Case 3: inside `raise <ExceptionType>(...)` — user raising web3 exception
+        const inRaiseStmt = node.ancestors().find(
+          (a) => a.kind() === "raise_statement" || a.kind() === "raise_stmt"
+        );
+        if (inRaiseStmt) {
+          addEdit(node.range().start.index, node.range().end.index, newEx);
+          continue;
+        }
+      }
+    }
+  }
+
+  // --- ABI type migration from web3.types → eth_typing ---
+  // Official v7: ABI types moved to eth_typing v5 package
+  // ABIEventParams → ABIComponentIndexed, ABIFunctionComponents → ABIComponent
+  // ABIFunctionParams → ABIComponent, ABIElement → Union (handled via TODO)
+  // ABIFunction → eth_typing, ABIEvent → eth_typing
+  if (hasWeb3Context) {
+    const abiTypeImports = rootNode.findAll({
+      rule: {
+        any: [
+          { pattern: "from web3.types import $NAMES" },
+          { pattern: "import web3.types" },
+        ],
+      },
+    });
+    const hasWeb3TypesImport = abiTypeImports.length > 0;
+
+    if (hasWeb3TypesImport) {
+      // Rename ABI type identifiers in type annotations and usage
+      const abiTypeRenames: Record<string, string> = {
+        ABIEventParams: "ABIComponentIndexed",
+        ABIFunctionComponents: "ABIComponent",
+        ABIFunctionParams: "ABIComponent",
+      };
+      for (const [oldType, newType] of Object.entries(abiTypeRenames)) {
+        const typeNodes = rootNode.findAll({
+          rule: {
+            kind: "identifier",
+            pattern: oldType,
+          },
+        });
+        for (const node of typeNodes) {
+          const inImport = node
+            .ancestors()
+            .some((a) => a.kind() === "import_from_statement");
+          if (inImport) {
+            addEdit(node.range().start.index, node.range().end.index, newType);
+          }
+          // Also rename in type annotations and general usage
+          const inType = node
+            .ancestors()
+            .some((a) => a.kind() === "type" || a.kind() === "type_alias");
+          if (inType) {
+            addEdit(node.range().start.index, node.range().end.index, newType);
+          }
+          // Rename bare usage in statements (e.g. variable assignments with type hints)
+          const inExpr = node
+            .ancestors()
+            .find((a) => a.kind() === "expression_statement");
+          if (inExpr && !inImport && !inType) {
+            addEdit(node.range().start.index, node.range().end.index, newType);
+          }
+        }
+      }
+
+      // Handle ABIElement → TODO (it's a Union type, not a simple rename)
+      const abiElementNodes = rootNode.findAll({
+        rule: {
+          kind: "identifier",
+          pattern: "ABIElement",
+        },
+      });
+      for (const node of abiElementNodes) {
+        const inImport = node
+          .ancestors()
+          .some((a) => a.kind() === "import_from_statement");
+        if (inImport) {
+          addEdit(
+            node.range().start.index,
+            node.range().end.index,
+            "// TODO: ABIElement moved to eth_typing"
+          );
+        }
       }
     }
   }
@@ -525,6 +655,22 @@ const codemod: Codemod<Python> = async (root) => {
       node.range().end.index,
       "# REMOVED in v7: this import no longer exists"
     );
+  }
+
+  // --- function_identifier → abi_element_identifier (attribute access) ---
+  if (hasWeb3Context) {
+    const funcIdNodes = rootNode.findAll({
+      rule: {
+        pattern: "$OBJ.function_identifier",
+      },
+    });
+    for (const node of funcIdNodes) {
+      const text = node.text();
+      const newText = text.replace(/\.function_identifier$/, ".abi_element_identifier");
+      if (newText !== text) {
+        addEdit(node.range().start.index, node.range().end.index, newText);
+      }
+    }
   }
 
   if (!hasChanges) {
