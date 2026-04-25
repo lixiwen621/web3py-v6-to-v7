@@ -22,9 +22,6 @@ interface Replacement {
 const STRING_REPLACEMENTS: Replacement[] = [
   // WebSocketProvider
   { old: "WebsocketProviderV2", new: "WebSocketProvider" },
-
-  // API renames
-  { old: "SolidityError", new: "ContractLogicError" },
 ];
 
 const codemod: Codemod<Python> = async (root) => {
@@ -93,6 +90,7 @@ const codemod: Codemod<Python> = async (root) => {
     name_to_address_middleware: "ENSNameToAddressMiddleware",
     geth_poa_middleware: "ExtraDataToPOAMiddleware",
     pythonic_middleware: "PythonicMiddleware",
+    attrdict_middleware: "AttributeDictMiddleware",
   };
   const shouldRenameMiddlewareIdentifier = (node: SgNode<Python>): boolean => {
     const inWeb3MiddlewareImport = node
@@ -221,7 +219,8 @@ const codemod: Codemod<Python> = async (root) => {
 
   // --- Exception type renames (only in web3.exceptions import contexts) ---
   // Official v7: AssertionError → Web3AssertionError, ValueError → Web3ValueError,
-  // TypeError → Web3TypeError, AttributeError → Web3AttributeError
+  // TypeError → Web3TypeError, AttributeError → Web3AttributeError,
+  // SolidityError → ContractLogicError
   // These are ONLY renamed when the identifier appears in a from web3.exceptions import
   // or when it's used as a caught exception type in a try/except block in a web3 context file.
   if (hasWeb3Context) {
@@ -230,6 +229,7 @@ const codemod: Codemod<Python> = async (root) => {
       ValueError: "Web3ValueError",
       TypeError: "Web3TypeError",
       AttributeError: "Web3AttributeError",
+      SolidityError: "ContractLogicError",
     };
     for (const [oldEx, newEx] of Object.entries(exceptionRenames)) {
       const nodes = rootNode.findAll({
@@ -340,7 +340,7 @@ const codemod: Codemod<Python> = async (root) => {
           addEdit(
             node.range().start.index,
             node.range().end.index,
-            "// TODO: ABIElement moved to eth_typing"
+            "# TODO: ABIElement moved to eth_typing"
           );
         }
       }
@@ -385,17 +385,19 @@ const codemod: Codemod<Python> = async (root) => {
     }
   }
 
-  // --- encodeABI() → encode_abi() on attribute access ---
-  const encodeAbiAttrs = rootNode.findAll({
-    rule: {
-      pattern: "$OBJ.encodeABI",
-    },
-  });
-  for (const node of encodeAbiAttrs) {
-    const text = node.text();
-    const newText = text.replace(/\.encodeABI$/, ".encode_abi");
-    if (newText !== text) {
-      addEdit(node.range().start.index, node.range().end.index, newText);
+  // --- encodeABI() → encode_abi() on attribute access (web3-specific) ---
+  if (hasWeb3Context) {
+    const encodeAbiAttrs = rootNode.findAll({
+      rule: {
+        pattern: "$OBJ.encodeABI",
+      },
+    });
+    for (const node of encodeAbiAttrs) {
+      const text = node.text();
+      const newText = text.replace(/\.encodeABI$/, ".encode_abi");
+      if (newText !== text) {
+        addEdit(node.range().start.index, node.range().end.index, newText);
+      }
     }
   }
 
@@ -612,6 +614,7 @@ const codemod: Codemod<Python> = async (root) => {
   }
 
   // --- Import lines with EthPM/LRU → replace with comment ---
+  // LRU is scoped to web3.datastructures to avoid false positives on LRU from other packages
   const importRemoveIds = ["EthPM", "LRU", "lru_dict"];
   for (const id of importRemoveIds) {
     const nodes = rootNode.findAll({
@@ -630,11 +633,24 @@ const codemod: Codemod<Python> = async (root) => {
           (a) => a.kind() === "import_statement" || a.kind() === "import_from_statement"
         );
         if (parentStmt) {
-          addEdit(
-            parentStmt.range().start.index,
-            parentStmt.range().end.index,
-            "# REMOVED in v7: this import no longer exists"
-          );
+          const importText = parentStmt.text();
+          // For LRU/lru_dict, only remove if from web3.datastructures
+          if ((id === "LRU" || id === "lru_dict") &&
+              importText.includes("web3.datastructures")) {
+            addEdit(
+              parentStmt.range().start.index,
+              parentStmt.range().end.index,
+              "# REMOVED in v7: this import no longer exists"
+            );
+          }
+          // For EthPM, remove from any import (unlikely to be a common class name)
+          if (id === "EthPM") {
+            addEdit(
+              parentStmt.range().start.index,
+              parentStmt.range().end.index,
+              "# REMOVED in v7: this import no longer exists"
+            );
+          }
         }
       }
     }

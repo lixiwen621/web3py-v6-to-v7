@@ -44,10 +44,9 @@ npx codemod workflow run -w workflow.yaml -t /path/to/web3.py --allow-dirty --no
 | Category | v6 Pattern | v7 Pattern |
 |---|---|---|
 | Middleware rename | `pythonic_middleware` | `PythonicMiddleware` |
-| Middleware rename | `attrdict_middleware` | `AttrDictMiddleware` |
+| Middleware rename | `attrdict_middleware` | `AttributeDictMiddleware` |
 | Middleware rename | `name_to_address_middleware` | `ENSNameToAddressMiddleware` |
 | Middleware rename | `geth_poa_middleware` | `ExtraDataToPOAMiddleware` |
-| Middleware rename | `pythonic_middleware` | `PythonicMiddleware` |
 | WebSocket | `WebsocketProviderV2` | `WebSocketProvider` |
 | WebSocket | `WebsocketProvider` | `LegacyWebSocketProvider` |
 | WebSocket API | `AsyncWeb3.persistent_websocket(...)` | `AsyncWeb3(...)` |
