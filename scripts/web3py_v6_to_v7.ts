@@ -221,8 +221,10 @@ const codemod: Codemod<Python> = async (root) => {
   // Official v7: AssertionError → Web3AssertionError, ValueError → Web3ValueError,
   // TypeError → Web3TypeError, AttributeError → Web3AttributeError,
   // SolidityError → ContractLogicError
-  // These are ONLY renamed when the identifier appears in a from web3.exceptions import
-  // or when it's used as a caught exception type in a try/except block in a web3 context file.
+  // For Python builtin exception names (AssertionError, ValueError, TypeError,
+  // AttributeError), we ONLY rename in except/raise if the file explicitly imports
+  // that name from web3.exceptions. Otherwise we'd break code that catches Python's
+  // built-in ValueError/TypeError etc.
   if (hasWeb3Context) {
     const exceptionRenames: Record<string, string> = {
       AssertionError: "Web3AssertionError",
@@ -231,6 +233,25 @@ const codemod: Codemod<Python> = async (root) => {
       AttributeError: "Web3AttributeError",
       SolidityError: "ContractLogicError",
     };
+    // Python builtins that MUST NOT be renamed unless imported from web3.exceptions
+    const builtinExceptionNames = new Set([
+      "AssertionError", "ValueError", "TypeError", "AttributeError",
+    ]);
+
+    // Detect which web3 exceptions are imported from web3.exceptions
+    const importedWeb3Exceptions = new Set<string>();
+    const exImportNodes = rootNode.findAll({
+      rule: { pattern: "from web3.exceptions import $NAMES" },
+    });
+    for (const node of exImportNodes) {
+      const importText = node.text();
+      for (const name of Object.keys(exceptionRenames)) {
+        if (importText.includes(name)) {
+          importedWeb3Exceptions.add(name);
+        }
+      }
+    }
+
     for (const [oldEx, newEx] of Object.entries(exceptionRenames)) {
       const nodes = rootNode.findAll({
         rule: {
@@ -239,7 +260,7 @@ const codemod: Codemod<Python> = async (root) => {
         },
       });
       for (const node of nodes) {
-        // Case 1: inside `from web3.exceptions import ...`
+        // Case 1: inside `from web3.exceptions import ...` — always rename
         const inWeb3ExceptionImport = node
           .ancestors()
           .find((a) => a.kind() === "import_from_statement")
@@ -250,21 +271,28 @@ const codemod: Codemod<Python> = async (root) => {
           continue;
         }
 
-        // Case 2: inside `except <ExceptionType>` block (catch clause)
+        // Case 2: inside `except <ExceptionType>` — only rename if imported from web3.exceptions
         const inExceptClause = node
           .ancestors()
           .some((a) => a.kind() === "except_clause");
         if (inExceptClause) {
-          addEdit(node.range().start.index, node.range().end.index, newEx);
+          // Python builtins: only rename if imported from web3.exceptions
+          const isBuiltin = builtinExceptionNames.has(oldEx);
+          if (!isBuiltin || importedWeb3Exceptions.has(oldEx)) {
+            addEdit(node.range().start.index, node.range().end.index, newEx);
+          }
           continue;
         }
 
-        // Case 3: inside `raise <ExceptionType>(...)` — user raising web3 exception
+        // Case 3: inside `raise <ExceptionType>(...)` — same logic
         const inRaiseStmt = node.ancestors().find(
           (a) => a.kind() === "raise_statement" || a.kind() === "raise_stmt"
         );
         if (inRaiseStmt) {
-          addEdit(node.range().start.index, node.range().end.index, newEx);
+          const isBuiltin = builtinExceptionNames.has(oldEx);
+          if (!isBuiltin || importedWeb3Exceptions.has(oldEx)) {
+            addEdit(node.range().start.index, node.range().end.index, newEx);
+          }
           continue;
         }
       }
