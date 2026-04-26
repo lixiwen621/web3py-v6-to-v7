@@ -267,6 +267,18 @@ const codemod: Codemod<Python> = async (root) => {
           ?.text()
           .includes("from web3.exceptions import");
         if (inWeb3ExceptionImport) {
+          // Avoid duplicate imports: if newEx already exists in the same import
+          // line and it's NOT the same identifier being renamed, skip the rename
+          const importText = node
+            .ancestors()
+            .find((a) => a.kind() === "import_from_statement")!
+            .text();
+          const afterImport = importText.slice(importText.indexOf("import") + "import".length);
+          const existingNames = afterImport.split(",").map((n) => n.trim());
+          if (existingNames.includes(newEx) && node.text() !== newEx) {
+            // newEx already exists — skip renaming oldEx to avoid duplicate
+            continue;
+          }
           addEdit(node.range().start.index, node.range().end.index, newEx);
           continue;
         }
@@ -295,6 +307,39 @@ const codemod: Codemod<Python> = async (root) => {
           }
           continue;
         }
+      }
+    }
+
+    // Dedup web3.exceptions imports: when a rename collides with an existing
+    // name (e.g. SolidityError → ContractLogicError when ContractLogicError
+    // is already imported), remove the old name from the import line.
+    for (const impNode of exImportNodes) {
+      const importText = impNode.text();
+      const importIdx = importText.indexOf("import");
+      const namesStr = importText.slice(importIdx + "import".length).trim();
+      const rawNames = namesStr.split(",").map((n) => n.trim());
+      const renamed: string[] = [];
+      for (const name of rawNames) {
+        renamed.push(exceptionRenames[name] || name);
+      }
+      const seen = new Set<string>();
+      const unique: string[] = [];
+      let hasDup = false;
+      for (const name of renamed) {
+        if (seen.has(name)) {
+          hasDup = true;
+          continue;
+        }
+        seen.add(name);
+        unique.push(name);
+      }
+      if (hasDup) {
+        const newImport = `from web3.exceptions import ${unique.join(", ")}`;
+        addEdit(
+          impNode.range().start.index,
+          impNode.range().end.index,
+          newImport
+        );
       }
     }
   }

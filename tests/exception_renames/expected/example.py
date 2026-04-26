@@ -1,5 +1,5 @@
 from web3 import Web3
-from web3.exceptions import ContractLogicError, ContractLogicError
+from web3.exceptions import ContractLogicError
 
 # Python builtins — should NOT be renamed (not imported from web3.exceptions)
 try:
