@@ -325,7 +325,9 @@ const codemod: Codemod<Python> = async (root) => {
         }
       }
 
-      // Handle ABIElement → TODO (it's a Union type, not a simple rename)
+      // Handle ABIElement → marker (it's a Union type, not a simple rename)
+      // In import statements, replace identifier with a clear marker so developer
+      // can clean up the import list without breaking syntax.
       const abiElementNodes = rootNode.findAll({
         rule: {
           kind: "identifier",
@@ -340,7 +342,7 @@ const codemod: Codemod<Python> = async (root) => {
           addEdit(
             node.range().start.index,
             node.range().end.index,
-            "# TODO: ABIElement moved to eth_typing"
+            "ABIElement_REMOVED_v7"
           );
         }
       }
@@ -549,6 +551,7 @@ const codemod: Codemod<Python> = async (root) => {
   }
 
   // --- Statements containing geth.miner → replace statement with comment ---
+  // Pattern is specific enough (.geth.miner only exists in web3.py code)
   const minerNodes = rootNode.findAll({
     rule: {
       any: [
@@ -568,6 +571,7 @@ const codemod: Codemod<Python> = async (root) => {
   }
 
   // --- Statements containing geth.personal → replace statement with comment ---
+  // Pattern is specific enough (.geth.personal only exists in web3.py code)
   const personalNodes = rootNode.findAll({
     rule: {
       any: [
