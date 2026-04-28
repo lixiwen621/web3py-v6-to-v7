@@ -516,11 +516,15 @@ const codemod: Codemod<Python> = async (root) => {
   }
 
   // --- Remaining camelCase kwargs → snake_case kwargs ---
+  // Official v7: direct dictionary parameters retain camelCase; keyword
+  // arguments to methods like `get_logs()` use snake_case.
+  // `fn_abi` → `abi_callable` is also a keyword parameter rename.
   if (hasWeb3Context) {
     const kwargRenames: Record<string, string> = {
       fromBlock: "from_block",
       toBlock: "to_block",
       blockHash: "block_hash",
+      fn_abi: "abi_callable",
     };
     for (const [oldKwarg, newKwarg] of Object.entries(kwargRenames)) {
       const kwargNodes = rootNode.findAll({

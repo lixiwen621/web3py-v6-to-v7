@@ -27,6 +27,7 @@ Automated transformations include:
   - `WebsocketProvider` -> `LegacyWebSocketProvider`
   - `CallOverride` -> `StateOverride`
   - `encodeABI` -> `encode_abi`
+  - `fn_abi` -> `abi_callable` (kwarg rename)
   - `SolidityError` -> `ContractLogicError`
 - Attribute rename:
   - `w3.middlewares` -> `w3.middleware`

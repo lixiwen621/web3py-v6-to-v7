@@ -7,3 +7,4 @@ node_modules/
 __pycache__/
 .env
 .DS_Store
+demo-sample/

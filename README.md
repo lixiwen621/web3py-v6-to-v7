@@ -24,10 +24,10 @@ npx codemod workflow run -w workflow.yaml -t /path/to/web3.py --allow-dirty --no
 
 ### Checklist-category deterministic coverage (primary metric)
 
-- Scored deterministic categories (`N_category`): `11` (added `pythonic_middleware` → `PythonicMiddleware`)
-- Automatically migrated categories (`A_category`): `9`
+- Scored deterministic categories (`N_category`): `12` (added `fn_abi` → `abi_callable` kwarg rename)
+- Automatically migrated categories (`A_category`): `10`
 - TODO/manual follow-up categories (`M_category`): `2`
-- Coverage (category): `9 / 11 = 81.8%`
+- Coverage (category): `10 / 12 = 83.3%`
 
 ### Raw occurrence delta (diagnostic metric)
 
@@ -59,6 +59,7 @@ npx codemod workflow run -w workflow.yaml -t /path/to/web3.py --allow-dirty --no
 | Attribute rename | `contract.functions.myFunction.function_identifier` | `.abi_element_identifier` |
 | Attribute rename | `w3.middlewares` | `w3.middleware` |
 | Kwarg rename | `fromBlock` / `toBlock` / `blockHash` | `from_block` / `to_block` / `block_hash` |
+| Kwarg rename | `fn_abi` | `abi_callable` |
 | Middleware builder | `construct_sign_and_send_raw_middleware(...)` | `SignAndSendRawMiddlewareBuilder.build(...)` |
 | Removed namespace | `w3.geth.miner.*` | TODO/comment flag |
 | Removed namespace | `w3.geth.personal.*` | TODO/comment flag |
@@ -92,6 +93,8 @@ This runs all `tests/*/input/example.py` fixtures through the workflow and diffs
 - `geth.miner` in control-flow contexts is TODO-flagged instead of auto-rewritten to avoid unsafe structural edits.
 - Occurrence-level counts can include non-callsite/internal framework references; see case-study caveats.
 - "No false positives" in this README is sample-observed for audited runs, not a universal guarantee for every repository.
+- Multiline parenthesized imports (`from X import (\n  A,\n  B,\n)`) are not matched by ast-gpeg's `$NAMES` pattern. The dedup logic handles flat imports only; multiline imports are left untouched and require manual migration.
+- `.encodeABI` class methods on user-defined classes in web3-imported files will be renamed to `.encode_abi` even though they are not web3.py contract methods.
 
 ## Submission Assets
 
