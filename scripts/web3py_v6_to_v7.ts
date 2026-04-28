@@ -310,14 +310,19 @@ const codemod: Codemod<Python> = async (root) => {
       }
     }
 
-    // Dedup web3.exceptions imports: when a rename collides with an existing
-    // name (e.g. SolidityError → ContractLogicError when ContractLogicError
-    // is already imported), remove the old name from the import line.
+    // Dedup web3.exceptions imports FIRST, before individual renames.
+    // When a rename collides with an existing name (e.g. SolidityError →
+    // ContractLogicError when ContractLogicError is already imported), we
+    // rewrite the entire import line. Collect which import lines get deduped
+    // so the individual rename pass below skips them, avoiding overlapping edits.
+    const dedupedImportStarts = new Set<number>();
     for (const impNode of exImportNodes) {
       const importText = impNode.text();
       const importIdx = importText.indexOf("import");
-      const namesStr = importText.slice(importIdx + "import".length).trim();
-      const rawNames = namesStr.split(",").map((n) => n.trim());
+      let namesStr = importText.slice(importIdx + "import".length).trim();
+      // Strip parentheses for multiline imports: "( A, B, )" → "A, B,"
+      namesStr = namesStr.replace(/^\(\s*/, "").replace(/\s*\)\s*$/, "");
+      const rawNames = namesStr.split(",").map((n) => n.trim()).filter((n) => n.length > 0);
       const renamed: string[] = [];
       for (const name of rawNames) {
         renamed.push(exceptionRenames[name] || name);
@@ -334,12 +339,76 @@ const codemod: Codemod<Python> = async (root) => {
         unique.push(name);
       }
       if (hasDup) {
-        const newImport = `from web3.exceptions import ${unique.join(", ")}`;
+        dedupedImportStarts.add(impNode.range().start.index);
+        // Preserve leading whitespace/indentation
+        const indent = importText.match(/^(\s*)/)?.[1] ?? "";
+        const newImport = `${indent}from web3.exceptions import ${unique.join(", ")}`;
         addEdit(
           impNode.range().start.index,
           impNode.range().end.index,
           newImport
         );
+      }
+    }
+
+    // Individual rename pass — skip identifiers inside import lines that
+    // are already handled by the dedup pass above.
+    for (const [oldEx, newEx] of Object.entries(exceptionRenames)) {
+      const nodes = rootNode.findAll({
+        rule: {
+          kind: "identifier",
+          pattern: oldEx,
+        },
+      });
+      for (const node of nodes) {
+        const importAncestor = node
+          .ancestors()
+          .find((a) => a.kind() === "import_from_statement");
+        const inWeb3ExceptionImport = importAncestor
+          ?.text()
+          .includes("from web3.exceptions import");
+
+        // Skip if this import line was already handled by dedup
+        if (inWeb3ExceptionImport && dedupedImportStarts.has(importAncestor.range().start.index)) {
+          continue;
+        }
+
+        if (inWeb3ExceptionImport) {
+          // Avoid duplicate imports: if newEx already exists in the same import
+          // line and it's NOT the same identifier being renamed, skip the rename
+          const importText = importAncestor.text();
+          const afterImport = importText.slice(importText.indexOf("import") + "import".length);
+          const existingNames = afterImport.split(",").map((n) => n.trim());
+          if (existingNames.includes(newEx) && node.text() !== newEx) {
+            continue;
+          }
+          addEdit(node.range().start.index, node.range().end.index, newEx);
+          continue;
+        }
+
+        // Case 2: inside `except <ExceptionType>` — only rename if imported from web3.exceptions
+        const inExceptClause = node
+          .ancestors()
+          .some((a) => a.kind() === "except_clause");
+        if (inExceptClause) {
+          const isBuiltin = builtinExceptionNames.has(oldEx);
+          if (!isBuiltin || importedWeb3Exceptions.has(oldEx)) {
+            addEdit(node.range().start.index, node.range().end.index, newEx);
+          }
+          continue;
+        }
+
+        // Case 3: inside `raise <ExceptionType>(...)` — same logic
+        const inRaiseStmt = node.ancestors().find(
+          (a) => a.kind() === "raise_statement" || a.kind() === "raise_stmt"
+        );
+        if (inRaiseStmt) {
+          const isBuiltin = builtinExceptionNames.has(oldEx);
+          if (!isBuiltin || importedWeb3Exceptions.has(oldEx)) {
+            addEdit(node.range().start.index, node.range().end.index, newEx);
+          }
+          continue;
+        }
       }
     }
   }
@@ -398,25 +467,34 @@ const codemod: Codemod<Python> = async (root) => {
         }
       }
 
-      // Handle ABIElement → marker (it's a Union type, not a simple rename)
-      // In import statements, replace identifier with a clear marker so developer
-      // can clean up the import list without breaking syntax.
-      const abiElementNodes = rootNode.findAll({
-        rule: {
-          kind: "identifier",
-          pattern: "ABIElement",
-        },
+      // Handle ABIElement → comment (it's a Union type, not a simple rename).
+      // For import lines containing ABIElement, remove the identifier from the
+      // import list and add a TODO comment above. Other identifiers on the same
+      // line are preserved so valid imports aren't broken.
+      const abiElementImports = rootNode.findAll({
+        rule: { pattern: "from web3.types import $NAMES" },
       });
-      for (const node of abiElementNodes) {
-        const inImport = node
-          .ancestors()
-          .some((a) => a.kind() === "import_from_statement");
-        if (inImport) {
-          addEdit(
-            node.range().start.index,
-            node.range().end.index,
-            "ABIElement_REMOVED_v7"
-          );
+      for (const node of abiElementImports) {
+        const text = node.text();
+        if (text.includes("ABIElement")) {
+          const indent = text.match(/^(\s*)/)?.[1] ?? "";
+          const importIdx = text.indexOf("import");
+          const namesStr = text.slice(importIdx + "import".length).trim();
+          const rawNames = namesStr.split(",").map((n) => n.trim());
+          const preserved = rawNames.filter((n) => n !== "ABIElement");
+          if (preserved.length > 0) {
+            addEdit(
+              node.range().start.index,
+              node.range().end.index,
+              `${indent}# TODO(v7): ABIElement removed from eth_typing; use Union[ABIDict] instead\n${indent}from web3.types import ${preserved.join(", ")}`
+            );
+          } else {
+            addEdit(
+              node.range().start.index,
+              node.range().end.index,
+              `${indent}# REMOVED in v7: ABIElement removed from eth_typing; use Union[ABIDict] instead`
+            );
+          }
         }
       }
     }

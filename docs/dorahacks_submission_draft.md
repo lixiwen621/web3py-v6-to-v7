@@ -4,7 +4,7 @@
 
 **web3.py v6 -> v7 Migration Codemod**
 
-- Repository: <YOUR_REPO_URL>
+- Repository: https://github.com/lixiwen621/web3py-v6-to-v7
 - Workflow file: `workflow.yaml`
 - Main transformer: `scripts/web3py_v6_to_v7.ts`
 
